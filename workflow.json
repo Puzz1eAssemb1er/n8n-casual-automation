@@ -1,0 +1,854 @@
+{
+  "name": "05 — Casual: база знаний и онбординг",
+  "nodes": [
+    {
+      "parameters": {
+        "public": true,
+        "initialMessages": "Добро пожаловать в Casual !  \n\nЯ помогу сохранить стандарты работы или пройти обучение. Напишите «стандарт» или «обучение».\n",
+        "options": {
+          "responseMode": "responseNodes"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -416,
+        160
+      ],
+      "id": "7d743cab-a43a-435b-bf6b-e2b24dbed4bc",
+      "name": "When chat message received",
+      "webhookId": "a6c49dc1-e2b1-469c-b510-fbeeae55bb0d"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1ajUwUGyJAg0ZHlPveZbYCoiWL1-b_bKaUWp9MdsvQJ4",
+          "mode": "list",
+          "cachedResultName": "Casual — База знаний и онбординг",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1ajUwUGyJAg0ZHlPveZbYCoiWL1-b_bKaUWp9MdsvQJ4/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Стандарты",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1ajUwUGyJAg0ZHlPveZbYCoiWL1-b_bKaUWp9MdsvQJ4/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        368,
+        144
+      ],
+      "id": "16d02f93-b68a-4f01-b375-fe4c77b9634a",
+      "name": "Get row(s) in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "XMqAPVj4RPMfJcB2",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1ajUwUGyJAg0ZHlPveZbYCoiWL1-b_bKaUWp9MdsvQJ4",
+          "mode": "list",
+          "cachedResultName": "Casual — База знаний и онбординг",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1ajUwUGyJAg0ZHlPveZbYCoiWL1-b_bKaUWp9MdsvQJ4/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 769626704,
+          "mode": "list",
+          "cachedResultName": "Прогресс",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1ajUwUGyJAg0ZHlPveZbYCoiWL1-b_bKaUWp9MdsvQJ4/edit#gid=769626704"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        592,
+        144
+      ],
+      "id": "3059d140-ca02-4020-837c-b1906d41b1ce",
+      "name": "Get row(s) in sheet1",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "XMqAPVj4RPMfJcB2",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const standards = $('Get row(s) in sheet').all()\n  .map(item => item.json)\n  .filter(s => s && s.ID);\n\nconst progress = $input.all()\n  .map(item => item.json)\n  .filter(item => item && item['ID стандарта']);\n\nconst sessionId = $('When chat message received').first().json.sessionId;\n\nconst completedIds = progress\n  .filter(item => item['Сотрудник'] === sessionId)\n  .map(item => String(item['ID стандарта']));\n\nfunction cleanText(text) {\n  if (!text) return '';\n  return String(text)\n    .replace(/<br\\s*\\/?>/gi, '\\n')\n    .replace(/<\\/?[^>]+(>|$)/g, '')\n    .replace(/&nbsp;/g, ' ')\n    .replace(/&amp;/g, '&')\n    .replace(/&lt;/g, '<')\n    .replace(/&gt;/g, '>')\n    .replace(/\\n{3,}/g, '\\n\\n')\n    .trim();\n}\n\nconst nextStandard = standards.find(s => !completedIds.includes(String(s.ID)));\n\nif (!nextStandard) {\n  return [{ json: { status: 'completed' } }];\n}\n\nreturn [{\n  json: {\n    status: 'next',\n    sessionId: sessionId,\n    standardId: nextStandard.ID,\n    name: cleanText(nextStandard['Название']),\n    description: cleanText(nextStandard['Описание']),\n    equipment: cleanText(nextStandard['Оборудование'])\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        768,
+        144
+      ],
+      "id": "c1c29274-de99-4f35-ada7-45739c730d71",
+      "name": "ветка «обучение»",
+      "notesInFlow": true,
+      "notes": "Сравнивает два списка:\n— все стандарты (из Get row(s) in sheet, лист «Стандарты»)\n— пройденные этим sessionId (из Get row(s) in sheet1, лист «Прогресс»)\n\nВозвращает первый непройденный стандарт со статусом 'next'.\nЕсли все пройдены — возвращает 'completed'.\nОчищает HTML-теги в name, description, equipment."
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1ajUwUGyJAg0ZHlPveZbYCoiWL1-b_bKaUWp9MdsvQJ4",
+          "mode": "list",
+          "cachedResultName": "Casual — База знаний и онбординг",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1ajUwUGyJAg0ZHlPveZbYCoiWL1-b_bKaUWp9MdsvQJ4/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Стандарты",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1ajUwUGyJAg0ZHlPveZbYCoiWL1-b_bKaUWp9MdsvQJ4/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ID": "={{ $now.toFormat('yyyyMMddHHmmss') }}",
+            "Название": "={{ $json.name }}",
+            "Описание": "={{ $json.description }}",
+            "Оборудование": "={{ $json.equipment }}",
+            "Дата создания": "={{ $now.toFormat('dd.MM.yyyy') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "ID",
+              "displayName": "ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Название",
+              "displayName": "Название",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Описание",
+              "displayName": "Описание",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Оборудование",
+              "displayName": "Оборудование",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Дата создания",
+              "displayName": "Дата создания",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        576,
+        -32
+      ],
+      "id": "9f1bef81-26cd-4bd4-aa51-c3d853f70638",
+      "name": "ветка «стандарт»",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "XMqAPVj4RPMfJcB2",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nfunction cleanText(text) {\n  if (!text) return '';\n  return String(text)\n    .replace(/<br\\s*\\/?>/gi, '\\n')\n    .replace(/<\\/?[^>]+(>|$)/g, '')\n    .replace(/&nbsp;/g, ' ')\n    .replace(/&amp;/g, '&')\n    .replace(/&lt;/g, '<')\n    .replace(/&gt;/g, '>')\n    .replace(/\\n{3,}/g, '\\n\\n')\n    .trim();\n}\n\nreturn items.map(item => {\n  const content = item.json.text;\n  const cleaned = content.replace(/^```json\\s*/, '').replace(/```\\s*$/, '').trim();\n\n  let parsed;\n  try {\n    parsed = JSON.parse(cleaned);\n  } catch (e) {\n    parsed = { name: 'Ошибка парсинга', description: content, equipment: '' };\n  }\n\n  return {\n    json: {\n      name: cleanText(parsed.name),\n      description: cleanText(parsed.description),\n      equipment: cleanText(parsed.equipment)\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        368,
+        -32
+      ],
+      "id": "f974ea3a-c5e5-4a83-9525-d805da64d362",
+      "name": "Code JS",
+      "notesInFlow": true,
+      "notes": "Парсит ответ модели из поля text.\n1. Убирает markdown-обёртки ```json ... ```\n2. Превращает строку в объект через JSON.parse\n3. Очищает HTML-теги (<br>, <p> и т. д.)\nВозвращает три поля: name, description, equipment."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "a5db15cc-17c7-4d50-bef8-d436daf803e3",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "next",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        944,
+        144
+      ],
+      "id": "e4e9b24c-b406-4a4c-a11d-47455b2913c2",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "message": "={{ \"📚 Стандарт: \" + $json.name + \"\\n\\n\" + $json.description + \"\\n\\n🛠 Оборудование: \" + $json.equipment + \"\\n\\nКогда изучишь — напиши «готово», и я покажу следующий.\" }}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chat",
+      "typeVersion": 1.3,
+      "position": [
+        1136,
+        64
+      ],
+      "id": "fd816123-6453-4dd9-9646-6346a5e4e5c1",
+      "name": "Chat",
+      "webhookId": "668512e6-3e56-4050-8818-82d879af9490"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1ajUwUGyJAg0ZHlPveZbYCoiWL1-b_bKaUWp9MdsvQJ4",
+          "mode": "list",
+          "cachedResultName": "Casual — База знаний и онбординг",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1ajUwUGyJAg0ZHlPveZbYCoiWL1-b_bKaUWp9MdsvQJ4/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 769626704,
+          "mode": "list",
+          "cachedResultName": "Прогресс",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1ajUwUGyJAg0ZHlPveZbYCoiWL1-b_bKaUWp9MdsvQJ4/edit#gid=769626704"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Сотрудник": "={{ $('ветка «обучение»').first().json.sessionId }}",
+            "ID стандарта": "={{ $('ветка «обучение»').first().json.standardId }}",
+            "Статус ": "В процессе",
+            "Дата": "={{ $now.toFormat('dd.MM.yyyy') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Сотрудник",
+              "displayName": "Сотрудник",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ID стандарта",
+              "displayName": "ID стандарта",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Статус ",
+              "displayName": "Статус ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Дата",
+              "displayName": "Дата",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1360,
+        64
+      ],
+      "id": "03816f65-28e9-4ade-856d-ac24cd0ad368",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "XMqAPVj4RPMfJcB2",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "message": "🎉 Поздравляю! Вы изучили все стандарты. Обучение завершено.",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chat",
+      "typeVersion": 1.3,
+      "position": [
+        1136,
+        272
+      ],
+      "id": "9a62b12c-d56a-40b2-a3eb-a0cb72588cb2",
+      "name": "Chat1",
+      "webhookId": "79ed4f50-7c95-40a2-a859-265ba7283d2b"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1ajUwUGyJAg0ZHlPveZbYCoiWL1-b_bKaUWp9MdsvQJ4",
+          "mode": "list",
+          "cachedResultName": "Casual — База знаний и онбординг",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1ajUwUGyJAg0ZHlPveZbYCoiWL1-b_bKaUWp9MdsvQJ4/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 769626704,
+          "mode": "list",
+          "cachedResultName": "Прогресс",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1ajUwUGyJAg0ZHlPveZbYCoiWL1-b_bKaUWp9MdsvQJ4/edit#gid=769626704"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        368,
+        352
+      ],
+      "id": "24b2b97a-4e9b-4564-aeb9-91279aa2c587",
+      "name": "Get row(s) in sheet2",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "XMqAPVj4RPMfJcB2",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const progress = $input.all().map(item => item.json);\nconst sessionId = $('When chat message received').first().json.sessionId;\n\nfunction getField(obj, targetName) {\n  const target = targetName.toLowerCase();\n  const key = Object.keys(obj).find(k => k.trim().toLowerCase() === target);\n  return key ? String(obj[key]).trim() : '';\n}\n\nconst inProgress = progress.find(item => {\n  const status = getField(item, 'статус').toLowerCase();\n  const rowSession = getField(item, 'сотрудник');\n  return rowSession === sessionId && status === 'в процессе';\n});\n\nif (!inProgress) {\n  return [{ json: { status: 'error', message: 'Нет активного стандарта' } }];\n}\n\nreturn [{\n  json: {\n    status: 'found',\n    rowNumber: inProgress.row_number,\n    standardId: inProgress['ID стандарта'],\n    sessionId: sessionId\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        544,
+        352
+      ],
+      "id": "1cf7ea2a-2a33-4a0a-afac-e21aac40f3e8",
+      "name": "Code in JavaScript",
+      "notesInFlow": true,
+      "notes": "Ищет в листе «Прогресс» строку, где:\n— Сотрудник = sessionId из чата\n— Статус = «в процессе»\n\nИспользует getField() для поиска полей с учётом регистра и невидимых символов.\nВозвращает rowNumber для обновления в узле Update row in sheet.\nЕсли строка не найдена — возвращает status: 'error'."
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1ajUwUGyJAg0ZHlPveZbYCoiWL1-b_bKaUWp9MdsvQJ4",
+          "mode": "list",
+          "cachedResultName": "Casual — База знаний и онбординг",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1ajUwUGyJAg0ZHlPveZbYCoiWL1-b_bKaUWp9MdsvQJ4/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 769626704,
+          "mode": "list",
+          "cachedResultName": "Прогресс",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1ajUwUGyJAg0ZHlPveZbYCoiWL1-b_bKaUWp9MdsvQJ4/edit#gid=769626704"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $json.rowNumber }}",
+            "Сотрудник": "={{ $json.sessionId }}",
+            "ID стандарта": "={{ $json.standardId }}",
+            "Статус ": "Пройдено",
+            "Дата": "={{ $now.toFormat('dd.MM.yyyy') }}"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": [
+            {
+              "id": "Сотрудник",
+              "displayName": "Сотрудник",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ID стандарта",
+              "displayName": "ID стандарта",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Статус ",
+              "displayName": "Статус ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Дата",
+              "displayName": "Дата",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        736,
+        352
+      ],
+      "id": "85b8d324-9d81-4084-af97-017e63a61224",
+      "name": "Update row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "XMqAPVj4RPMfJcB2",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "message": "Я вас не понял. Напишите «стандарт», чтобы сохранить стандарт, или «обучение», чтобы пройти обучение.",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chat",
+      "typeVersion": 1.3,
+      "position": [
+        -208,
+        432
+      ],
+      "id": "03347a2d-aadf-4a23-bbf4-20c619e4501c",
+      "name": "Chat2",
+      "webhookId": "280a617a-10e3-47e7-ba0c-6886d2aa27ca"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.chatInput.toLowerCase() }}",
+                    "rightValue": "стандарт",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    },
+                    "id": "990f0aba-cd4e-437b-8166-cbe9210fd1a1"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "620e0591-8e74-47c7-910d-6aea2d1309b4",
+                    "leftValue": "={{ $json.chatInput.toLowerCase() }}",
+                    "rightValue": "обучение",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "fc98ad7f-929f-4387-bad0-65437cd27e35",
+                    "leftValue": "={{ $json.chatInput.toLowerCase() }}",
+                    "rightValue": "готово",
+                    "operator": {
+                      "type": "string",
+                      "operation": "contains"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        -208,
+        128
+      ],
+      "id": "d7d7f2fb-8ae6-456b-942a-4aa392a63b67",
+      "name": "02. Маршрутизация",
+      "notesInFlow": true,
+      "notes": "Маршрутизация сообщений по ключевым словам:\n— «стандарт» → ветка сохранения стандарта (Output 0)\n— «обучение» → ветка онбординга (Output 1)\n— «готово»   → ветка отметки о прохождении (Output 2)\n— всё остальное → Fallback (Output 3)"
+    },
+    {
+      "parameters": {
+        "messages": {
+          "messageValues": [
+            {
+              "message": "Ты — ассистент, который структурирует стандарты работы кофейни. Пользователь описывает процесс, ты возвращаешь JSON с полями: name (название стандарта, до 80 символов), description (пошаговое описание), equipment (список оборудования через запятую). Отвечай ТОЛЬКО валидным JSON без markdown-обёрток."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        16,
+        128
+      ],
+      "id": "d6ba9908-f5e2-474f-a541-18c1079db15d",
+      "name": "Basic LLM Chain",
+      "notesInFlow": true,
+      "notes": "Отправляет текст от бариста в Claude Sonnet 5 через Gateway credits.\nSystem Prompt задан через Chat Messages (роль System):\nмодель структурирует описание в JSON с полями name, description, equipment."
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "claude-sonnet-5",
+          "cachedResultName": "Claude Sonnet 5"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.6,
+      "position": [
+        80,
+        288
+      ],
+      "id": "77962a72-e050-4c88-b075-71b2c1add87f",
+      "name": "Anthropic Chat Model",
+      "credentials": {
+        "anthropicApi": {
+          "id": null,
+          "name": "",
+          "__aiGatewayManaged": true
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "02. Маршрутизация",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet1": {
+      "main": [
+        [
+          {
+            "node": "ветка «обучение»",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code JS": {
+      "main": [
+        [
+          {
+            "node": "ветка «стандарт»",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ветка «обучение»": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Chat",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Chat1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ветка «стандарт»": {
+      "main": [
+        []
+      ]
+    },
+    "Chat": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet2": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "02. Маршрутизация": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get row(s) in sheet2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Chat2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Code JS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "timeSavedPerExecution": 5
+  },
+  "versionId": "29065832-cf52-4908-b296-79704a923181",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "f4cdbea8b35739b815a318621b041dee903b8ff4108286f5ea9b477bdb511668"
+  },
+  "nodeGroups": [],
+  "id": "qVkAFCesgEKE6sXH",
+  "tags": []
+}
