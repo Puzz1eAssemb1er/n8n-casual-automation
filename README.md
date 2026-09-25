@@ -35,6 +35,10 @@ Chat Trigger → Switch (маршрутизация по ключевым сло
     └── Fallback   → Chat (подсказка)
 ```
 
+### Визуализация workflow
+
+![Схема workflow в n8n](images/01-workflow.png)
+
 ## Технический стек
 
 | Инструмент | Назначение |
