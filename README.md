@@ -1,5 +1,21 @@
 # n8n Casual Automation
 
+Collection of portfolio automation cases built with n8n and AI.
+
+## Projects
+
+### [SEO Auditor](projects/seo-auditor/README.md)
+
+An on-page SEO auditing pipeline that discovers internal URLs, crawls pages, extracts `Title`, `meta description` and `H1`, preserves failed crawl targets, performs deterministic checks and uses Claude for interpretation and recommendations.
+
+**Current test case:** 70 crawl targets → 65 successful → 5 errors.
+
+The project documents the target v2 architecture, common page-result contract, error-handling model and implementation roadmap.
+
+---
+
+## Case study: Casual onboarding
+
 Кейс автоматизации бизнес-процесса: **онбординг сотрудников кофейни через чат-бота на n8n Cloud с AI-агентом**.
 
 Демонстрирует полный цикл работы бизнес-аналитика и автоматизатора: от анализа проблемы до внедрения работающей системы.

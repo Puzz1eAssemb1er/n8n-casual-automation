@@ -1,161 +1,214 @@
 # n8n SEO Auditor
 
-> Automated on-page SEO audit workflow built in **n8n**. The workflow discovers internal URLs from a site's homepage, crawls the discovered pages, extracts `Title`, `meta description` and `H1`, prepares a consolidated dataset, sends it to **Claude** for analytical interpretation, converts the result to styled HTML and delivers the final report by email.
+> An n8n-based on-page SEO auditing pipeline that discovers internal URLs, crawls pages, extracts SEO metadata, preserves crawl failures, performs deterministic checks and uses Claude for interpretation and recommendations.
 
-## Overview
+## Project status
 
-**Input:** target website URL  
-**Process:** discover → filter → deduplicate → crawl → extract → aggregate → analyze → format → deliver  
-**Output:** structured SEO audit report delivered by email
+**Current stage:** MVP workflow + v2 architecture in progress.
 
-The workflow separates deterministic processing from LLM interpretation: n8n performs URL discovery, filtering, crawling, extraction and aggregation; Claude interprets the collected metadata and produces recommendations.
+The current workflow already performs homepage discovery, internal-link filtering, deduplication, page crawling, metadata extraction, Claude analysis, HTML formatting and email delivery.
 
-## Architecture
+During testing the crawler produced:
 
-```mermaid
+\`\`\`
+70 crawl targets
+├── 65 success
+└── 5 error
+\`\`\`
+
+The next implementation step is to preserve those 5 failed pages as first-class audit results instead of losing them before the final report.
+
+The repository therefore separates:
+
+- the **current executable workflow export** in \`workflows/seo-auditor.json\`;
+- the **target v2 architecture and implementation plan** documented in \`docs/\`.
+
+## Business problem
+
+A manual SEO audit requires repetitive work:
+
+1. collect URLs;
+2. open pages;
+3. inspect \`Title\`, \`meta description\` and \`H1\`;
+4. identify missing, duplicated or suspicious metadata;
+5. prepare a report.
+
+The workflow converts this into a repeatable pipeline with explicit inputs, processing stages, error handling and automated delivery.
+
+## Input / output
+
+**Input**
+
+- Target website URL (\`baseUrl\`).
+
+**Output**
+
+A structured audit containing:
+
+- total discovered URLs;
+- successful and failed crawl counts;
+- page-level \`Title\`, \`Description\` and \`H1\` data;
+- deterministic SEO findings;
+- failed URL records with error information;
+- Claude-generated interpretation and recommendations;
+- HTML email report.
+
+## Target architecture
+
+\`\`\`mermaid
 flowchart LR
-    A[Manual Trigger] --> B[Target URL]
+    A[Manual Trigger] --> B[Audit Configuration]
     B --> C[Download Homepage]
     C --> D[Extract Links]
-    D --> E[Split Links]
-    E --> F[Filter Internal]
-    F --> G[Remove Duplicates]
-    G --> H[Build Absolute URLs]
-    H --> I[Crawl Pages]
-    I --> J[Extract Title / Description / H1]
-    J --> K[Build Consolidated Report]
-    K --> L[Claude Analysis]
-    L --> M[HTML Formatting]
-    M --> N[Email Delivery]
-    O[(Claude model)] -.-> L
-```
+    D --> E[Normalize URLs]
+    E --> F[Deduplicate]
+    F --> G[Download Pages]
 
-## Workflow stages
+    G -->|Success| H[Extract Metadata]
+    G -->|Error| I[Normalize Error]
 
-| Stage | Responsibility |
-|---|---|
-| Trigger / configuration | Start execution and define `baseUrl` |
-| Discovery | Download homepage and extract links |
-| Filtering | Keep internal URLs and remove duplicates |
-| Normalization | Convert relative URLs to absolute URLs |
-| Crawling | Request discovered pages |
-| Extraction | Collect `title`, `description`, `h1` |
-| Aggregation | Build one bounded analytical dataset |
-| AI analysis | Identify issues and formulate recommendations |
-| Presentation | Convert Markdown response to HTML |
-| Delivery | Send the report by email |
+    H --> J[Page Result]
+    I --> K[Error Result]
 
-## Node map
+    J --> L[Merge Results]
+    K --> L
 
-- `▶️ Запуск аудита` — manual start
-- `🌐 Адрес сайта` — target `baseUrl`
-- `📥 Скачать главную страницу` — homepage HTTP request
-- `🔗 Собрать ссылки` — extracts `a[href]`, `title`, `description`, `h1`
-- `📋 Разбить на список` — fans links out into individual items
-- `🧹 Фильтр ссылок` — keeps internal/relative links
-- `🔂 Убрать дубли` — removes duplicate raw URLs
-- `🔧 Сделать полные адреса` — creates `fullUrl`
-- `📥 Скачать все страницы` — crawls discovered pages
-- `🏷️ Извлечь мета-теги` — extracts page metadata
-- `📝 Собрать отчёт` — aggregates page-level data
-- `🤖 Анализ Claude AI` — LLM-based SEO interpretation
-- `🧠 Модель Claude` — model provider
-- `🎨 Оформить HTML` — Markdown-to-HTML transformation
-- `✉️ Отправить на email` — report delivery
+    L --> M[Deterministic SEO Checks]
+    M --> N[Structured Audit Dataset]
+    N --> O[Claude Analysis]
+    P[(Claude Model)] -.-> O
+    O --> Q[HTML Report]
+    Q --> R[Email Delivery]
+\`\`\`
 
-## Data flow
+## Processing stages
 
-A normalized crawl target is represented by `fullUrl`. Each crawled page produces:
+| Stage | Responsibility | Result |
+| --- | --- | --- |
+| Configuration | Define target and runtime parameters | Audit configuration |
+| Discovery | Download homepage and extract links | Raw URL candidates |
+| URL processing | Normalize and deduplicate URLs | Unique crawl targets |
+| Crawling | Request every target | Success / Error |
+| Success handling | Extract metadata and build stable result | \`status=success\` |
+| Error handling | Preserve failed URL and error information | \`status=error\` |
+| Merge | Combine both result streams | Complete crawl dataset |
+| Deterministic audit | Calculate SEO facts | Machine-checkable findings |
+| AI analysis | Explain findings and recommendations | Human-readable analysis |
+| Delivery | Render and send report | HTML email |
 
-```json
-{
-  "title": "...",
-  "description": "...",
-  "h1": "..."
-}
-```
+## Why the Error branch matters
 
-The aggregation stage adds character counts for `title` and `description` and builds the consolidated input for Claude.
+The observed run demonstrates a data-completeness problem:
 
-## AI responsibility
+\`\`\`
+70 targets
+├── 65 successful
+└── 5 failed
+\`\`\`
 
-Claude is instructed to analyze:
+A report built only from the 65 successful pages cannot reliably answer how many URLs were actually checked.
 
-1. overall statistics;
-2. missing, short, long or duplicate `Title` values;
-3. missing, short, long or duplicate descriptions;
-4. missing or duplicate H1 values;
-5. concrete corrective actions.
+The target design therefore follows:
 
-The AI layer is intentionally downstream of deterministic extraction. It does not receive raw website HTML as its primary input.
+\`\`\`
+Success → Page Result ─┐
+                       ├→ Merge Results → Complete Audit Dataset
+Error   → Error Result ┘
+\`\`\`
+
+This establishes a simple invariant:
+
+\`\`\`
+successCount + errorCount = crawlTargetCount
+\`\`\`
+
+## Deterministic vs AI responsibility
+
+**n8n / deterministic layer**
+
+- URL normalization;
+- deduplication;
+- crawl execution;
+- success / error status;
+- HTTP and error metadata;
+- missing-field checks;
+- character counts;
+- duplicate detection;
+- summary statistics.
+
+**Claude**
+
+- interpret findings;
+- summarize the audit;
+- explain patterns;
+- formulate recommendations.
+
+Claude is therefore an interpretation layer, not the source of truth for basic counts or boolean SEO checks.
 
 ## Current scope
 
-This is an **on-page SEO metadata auditor / MVP crawler**, not a complete technical SEO crawler.
-
-Currently covered:
+### Included
 
 - homepage link discovery;
 - internal-link filtering;
 - URL deduplication;
 - page crawling;
-- `Title` extraction;
-- `meta description` extraction;
-- `H1` extraction;
-- character counts;
+- \`Title\` extraction;
+- \`meta description\` extraction;
+- \`H1\` extraction;
 - AI-assisted interpretation;
 - HTML email report.
 
-Not currently covered:
+### Next implementation scope
 
-- recursive multi-level crawling;
-- `robots.txt` / `sitemap.xml` analysis;
-- canonical validation;
-- `noindex` / `nofollow` analysis;
-- redirect-chain reporting;
-- image `alt` coverage;
+- preserve failed crawl targets;
+- common PageResult contract;
+- Merge / Append of success and error records;
+- deterministic SEO rules;
+- structured audit dataset;
+- bounded retry policy.
+
+### Future scope
+
+- recursive crawling;
+- \`robots.txt\` / \`sitemap.xml\`;
+- canonical / noindex / nofollow checks;
+- redirect analysis;
+- image \`alt\` coverage;
 - Core Web Vitals;
-- first-class HTTP status dataset.
-
-## Known technical limitations
-
-1. Raw URLs are deduplicated before absolute URL normalization. Equivalent relative and absolute URLs can therefore survive as separate crawl targets.
-2. Homepage and page-crawl requests use different timeout values.
-3. Crawl scope is based on links found on the homepage; it is not recursive.
-4. Page-download errors are configured to continue, but there is no dedicated error-reporting branch in the current graph.
-5. SEO length classification is currently delegated to the LLM rather than enforced by deterministic threshold rules.
-
-These limitations are documented deliberately as part of the current MVP design.
-
-## Installation
-
-1. Import `workflows/seo-auditor.json` into n8n.
-2. Configure the Anthropic/Claude credential.
-3. Configure the Gmail credential.
-4. Set the target URL in `🌐 Адрес сайта`.
-5. Run `▶️ Запуск аудита`.
-
-The repository export is sanitized: credentials, personal recipient data and instance-specific metadata are not included.
-
-## Portfolio value
-
-The project demonstrates workflow orchestration, HTTP integration, HTML parsing, JavaScript data transformation, filtering/deduplication, LLM integration, prompt design, report generation and automated delivery. From a Business Analyst / AI-automation perspective, the key artifact is the explicit transformation of a manual audit task into a repeatable process with defined input, processing stages and output.
-
-## Security
-
-Never commit API keys, OAuth tokens, exported credentials or personal test data. Use n8n's credential mechanism and placeholders in public examples.
+- persistent storage.
 
 ## Repository structure
 
-```text
+\`\`\`
 projects/seo-auditor/
 ├── README.md
+├── .gitignore
 ├── workflows/
 │   └── seo-auditor.json
 ├── docs/
 │   ├── architecture.md
 │   ├── workflow.md
+│   ├── data-contract.md
+│   ├── error-handling.md
+│   ├── implementation-plan.md
 │   └── technical-notes.md
 └── examples/
     └── report-schema.md
-```
+\`\`\`
+
+## Installation
+
+1. Import \`workflows/seo-auditor.json\` into n8n.
+2. Configure the Claude/Anthropic credential.
+3. Configure the Gmail credential.
+4. Set the target URL in \`🌐 Адрес сайта\`.
+5. Run \`▶️ Запуск аудита\`.
+
+The public export must not contain credentials, tokens or personal recipient data.
+
+## Portfolio value
+
+The project demonstrates business-process decomposition, workflow orchestration, HTTP integration, HTML parsing, JavaScript transformation, explicit success/error paths, data contracts, deterministic rule design, LLM integration and automated reporting.
+
+The key portfolio artifact is the architecture decision to make the automation **traceable and complete**, including unsuccessful processing results.

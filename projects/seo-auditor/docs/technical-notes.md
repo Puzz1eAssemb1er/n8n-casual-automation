@@ -1,53 +1,107 @@
-# Technical notes and improvement backlog
+# Technical notes
 
-The current implementation should be presented as an MVP rather than as a complete production crawler.
+## Current implementation vs target design
 
-## Current limitations
+The current workflow is an MVP. It proves the end-to-end automation path, while the v2 backlog focuses on correctness, traceability and resilience.
 
-### URL normalization
-Raw links are deduplicated before absolute URL normalization. Equivalent relative and absolute forms can therefore remain as separate crawl targets.
+## URL normalization
 
-**Next step:** normalize first, then deduplicate on the canonical URL.
+**Current:** raw URLs are deduplicated before absolute URL normalization.
 
-### Crawl depth
-The workflow discovers URLs from the homepage only. It does not recursively crawl discovered pages to find additional URLs.
+**Target:** normalize first, then deduplicate using normalized \`fullUrl\` as the unique crawl key.
 
-**Next step:** introduce configurable crawl depth and a visited-URL set.
+## Page result contract
 
-### Error handling
-Page downloads continue after individual request failures, but the current graph does not produce a dedicated error dataset.
+Every crawl target should produce exactly one logical result:
 
-**Next step:** preserve failed URL, status/error and retry information and include them in the final report.
+\`\`\`
+status = success | error
+\`\`\`
 
-### SEO rules
-Length classification is currently delegated to the LLM.
+Success results contain extracted metadata.
 
-**Next step:** implement deterministic checks for missing fields, duplicates and configurable character thresholds, then use the LLM for explanation and prioritization.
+Error results contain the crawl URL and available error information.
 
-### Scalability
-A large website can produce a large aggregated prompt and high execution cost.
+This establishes a one-input / one-result rule for the crawl stage.
 
-**Next step:** add page limits, batching, structured JSON output and optionally a persistent data store.
+## Error handling
 
-## Target page contract
+The current crawler continues after individual page request failures. The missing component is a dedicated Error branch that converts failed items into the same data contract as successful items.
 
-A stronger next version should produce a record similar to:
+Target:
 
-```json
-{
-  "url": "https://example.com/page",
-  "statusCode": 200,
-  "title": "Example title",
-  "titleLength": 13,
-  "description": "Example description",
-  "descriptionLength": 20,
-  "h1": "Example H1",
-  "error": null
-}
-```
+\`\`\`
+Success → PageResult ─┐
+                      ├→ Merge / Append
+Error   → ErrorResult ┘
+\`\`\`
 
-This structure would make the workflow easier to test and extend toward a database, spreadsheet or BI layer.
+## Retry policy
+
+A later iteration should retry only transient failures:
+
+| Error class | Default handling |
+| --- | --- |
+| Timeout / network error | Retry |
+| HTTP 429 | Retry with delay |
+| HTTP 5xx | Retry with limit |
+| HTTP 4xx | Record as final error unless business rules require otherwise |
+| Unknown | Record and inspect |
+
+Retries must be bounded.
+
+## Deterministic SEO checks
+
+Current AI analysis is asked to identify missing fields, suspicious lengths and duplicates.
+
+Target: compute these facts in n8n before the LLM stage.
+
+This gives reproducible results and prevents the LLM from becoming the source of truth for numeric counts and boolean checks.
+
+## Structured aggregation
+
+The current aggregation creates one large text report.
+
+Target:
+
+- build structured JSON records;
+- calculate summary statistics;
+- generate the LLM prompt from those records;
+- keep the original structured data available for future exports.
+
+## Crawl limits
+
+A production-oriented implementation should expose:
+
+- maximum number of crawl targets;
+- per-request timeout;
+- maximum retry count;
+- optional delay between requests;
+- optional crawl depth.
+
+## Testing strategy
+
+Minimum test matrix:
+
+1. all pages successful;
+2. mixed 200 + 4xx;
+3. timeout;
+4. 5xx;
+5. 429;
+6. duplicate URLs;
+7. missing SEO metadata;
+8. duplicate metadata;
+9. empty link set;
+10. homepage request failure.
 
 ## Security
 
-Public exports must not contain API keys, OAuth tokens, personal recipient addresses or n8n instance-specific credential metadata. The repository version therefore uses placeholders and n8n's credential mechanism.
+Never commit:
+
+- API keys;
+- OAuth tokens;
+- exported credentials;
+- personal recipient addresses;
+- instance-specific secret metadata.
+
+Use n8n credentials and public placeholders.
