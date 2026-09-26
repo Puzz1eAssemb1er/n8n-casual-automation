@@ -2,75 +2,205 @@
 
 ## Phase 1 — Start and configure
 
-### `▶️ Запуск аудита`
-Manual trigger. Starts one audit execution.
+### \`▶️ Запуск аудита\`
 
-### `🌐 Адрес сайта`
-Stores the target site in `baseUrl`.
+Manual trigger for one audit execution.
 
-## Phase 2 — Discover internal pages
+### \`🌐 Адрес сайта\`
 
-### `📥 Скачать главную страницу`
-Downloads the homepage HTML using an HTTP GET request.
+Stores the target website in \`baseUrl\`.
 
-### `🔗 Собрать ссылки`
-Extracts `title`, `meta description`, `h1` and all `a[href]` values.
+## Phase 2 — Discover URLs
 
-### `📋 Разбить на список`
-Converts the link array into individual n8n items so each URL can be processed independently.
+### \`📥 Скачать главную страницу\`
 
-### `🧹 Фильтр ссылок`
-Keeps relative URLs and URLs belonging to the configured site.
+Downloads the homepage HTML.
 
-### `🔂 Убрать дубли`
-Removes repeated raw URL values.
+### \`🔗 Собрать ссылки\`
 
-### `🔧 Сделать полные адреса`
-Creates `fullUrl`: absolute URLs are preserved; relative paths are combined with `baseUrl`.
+Extracts \`a[href]\` values from the homepage.
 
-## Phase 3 — Crawl and extract
+### \`📋 Разбить на список\`
 
-### `📥 Скачать все страницы`
-Requests every discovered `fullUrl`. The current design continues when an individual page request fails.
+Converts the link array into individual n8n items.
 
-### `🏷️ Извлечь мета-теги`
-Extracts three fields from each returned page:
+### \`🧹 Фильтр ссылок\`
 
-```text
+Keeps relative links and links belonging to the configured site.
+
+### \`🔂 Убрать дубли\`
+
+**Current:** removes duplicate raw URL values.
+
+**V2:** normalization must happen before deduplication so equivalent URLs become one crawl target.
+
+### \`🔧 Сделать полные адреса\`
+
+**Current:** creates \`fullUrl\` from \`baseUrl\` and a relative link.
+
+**V2:** move URL normalization before deduplication and use the normalized URL as the crawl key.
+
+## Phase 3 — Crawl
+
+### \`📥 Скачать все страницы\`
+
+Requests every crawl target.
+
+The current execution demonstrates the need for explicit error handling:
+
+\`\`\`
+70 inputs
+├── 65 → Success
+└── 5  → Error
+\`\`\`
+
+The Error output must become part of the data pipeline.
+
+## Phase 4 — Success path
+
+### \`🏷️ Извлечь мета-теги\`
+
+Extracts:
+
+\`\`\`
 title
 description
 h1
-```
+\`\`\`
 
-## Phase 4 — Build the analytical dataset
+### Target node: \`✅ Сформировать результат страницы\`
 
-### `📝 Собрать отчёт`
-Converts multiple page items into one text payload. For each page it records the values of `Title`, `Description` and `H1` and calculates character counts for `Title` and `Description`.
+Create one stable record per successful page:
 
-Missing values are represented as `[ОТСУТСТВУЕТ]`.
+\`\`\`json
+{
+  "url": "https://example.com/page",
+  "status": "success",
+  "httpStatus": 200,
+  "title": "Example title",
+  "titleLength": 13,
+  "description": "Example description",
+  "descriptionLength": 20,
+  "h1": "Example H1",
+  "error": null
+}
+\`\`\`
 
-## Phase 5 — AI analysis
+## Phase 5 — Error path
 
-### `🤖 Анализ Claude AI`
-Receives the aggregated report and asks Claude to produce a structured SEO assessment covering overall statistics, Title, Description, H1 and corrective actions.
+### Target node: \`⚠️ Нормализовать ошибку загрузки\`
 
-### `🧠 Модель Claude`
-Provides the LLM used by the chain.
+Convert the raw error output into the same page-result structure.
 
-## Phase 6 — Presentation and delivery
+The node must preserve:
 
-### `🎨 Оформить HTML`
-Converts selected Markdown constructs from the AI response into simple HTML suitable for an email body.
+- original URL;
+- status = \`error\`;
+- HTTP status when available;
+- error type;
+- readable message;
+- retryable flag;
+- attempt number.
 
-### `✉️ Отправить на email`
-Sends the formatted report through Gmail.
+## Phase 6 — Merge
 
-## Design principle
+### Target node: \`🔀 Объединить результаты\`
 
-The workflow intentionally uses a deterministic-first approach:
+Connect both result branches:
 
-```text
-collect facts → normalize data → aggregate → ask AI to interpret
-```
+\`\`\`
+Success → Page Result ─┐
+                       ├→ Merge / Append
+Error   → Error Result ┘
+\`\`\`
 
-This makes the LLM input bounded and traceable instead of sending raw website HTML directly to the model.
+Target invariant:
+
+\`\`\`
+successCount + errorCount = crawlTargetCount
+\`\`\`
+
+Observed test:
+
+\`\`\`
+65 + 5 = 70
+\`\`\`
+
+## Phase 7 — Deterministic SEO checks
+
+### Target node: \`🔎 Проверить SEO-правила\`
+
+Calculate facts independently of the LLM:
+
+- missing Title;
+- missing Description;
+- missing H1;
+- Title length;
+- Description length;
+- duplicate Title;
+- duplicate Description;
+- duplicate H1;
+- success count;
+- error count.
+
+Thresholds should be explicit configuration.
+
+## Phase 8 — Structured dataset
+
+### Target node: \`📝 Собрать структурированный отчёт\`
+
+The current workflow builds a large text payload.
+
+V2 should create structured audit data first, then generate the LLM prompt from that dataset.
+
+## Phase 9 — Claude analysis
+
+### \`🤖 Анализ Claude AI\`
+
+Claude receives deterministic findings and explains them.
+
+The AI layer should produce:
+
+- summary;
+- interpretation;
+- recommendations.
+
+It should not be responsible for primary crawl counts or deterministic rule calculation.
+
+## Phase 10 — Presentation and delivery
+
+### \`🎨 Оформить HTML\`
+
+Converts the AI response into email-ready HTML.
+
+### \`✉️ Отправить на email\`
+
+Delivers the final report.
+
+## Target end-to-end flow
+
+\`\`\`
+Start
+ ↓
+Configure audit
+ ↓
+Discover URLs
+ ↓
+Normalize
+ ↓
+Deduplicate
+ ↓
+Crawl
+ ├─ Success → Extract → Page Result ─┐
+ └─ Error   → Normalize → Error Result ─┤
+                                       ↓
+                                   Merge Results
+                                       ↓
+                               Deterministic Checks
+                                       ↓
+                               Structured Dataset
+                                       ↓
+                                    Claude
+                                       ↓
+                                  HTML / Email
+\`\`\`
